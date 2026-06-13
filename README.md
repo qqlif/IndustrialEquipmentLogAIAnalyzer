@@ -37,13 +37,13 @@
 
 ## 5. 项目目录说明
 工业设备日志 AI 分析小工具/
-├── MainWindow.xaml                # 主界面布局、样式定义
-├── MainWindow.xaml.cs            # 核心业务逻辑、流程控制
-├── DialogService.cs               # 全局统一弹窗、消息提示服务
-└── config/                        # 全局配置目录
-    ├── appsettings.json           # 主配置文件（接口地址、模型名称等）
-    ├── 提示词/诊断提示词.txt       # AI 分析规则与输出格式约束
-    └── 知识库/诊断知识库.md       # 工业设备故障知识库、推理规则
+- MainWindow.xaml                # 主界面布局、样式定义
+- MainWindow.xaml.cs            # 核心业务逻辑、流程控制
+- DialogService.cs               # 全局统一弹窗、消息提示服务
+- config/                        # 全局配置目录
+  - appsettings.json           # 主配置文件（接口地址、模型名称等）
+  - 提示词/诊断提示词.txt       # AI 分析规则与输出格式约束
+  - 知识库/诊断知识库.md       # 工业设备故障知识库、推理规则
 
 
 ## 6. 快速运行步骤
