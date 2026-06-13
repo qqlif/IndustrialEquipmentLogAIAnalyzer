@@ -58,6 +58,25 @@ namespace 工业设备日志_AI_分析小工具
             LoadSettings();
             InitializeActiveProvider();
             LoadSelectedProviderSettingsToUi();
+            InitializeRawLogTextBox();
+        }
+
+        #endregion
+
+        #region UI 初始化
+
+        private void InitializeRawLogTextBox()
+        {
+            // 彻底阻止 RawLogTextBox 获得焦点
+            RawLogTextBox.PreviewGotKeyboardFocus += (_, e) => e.Handled = true;
+            RawLogTextBox.PreviewMouseDown += (_, e) =>
+            {
+                // 仍允许鼠标滚轮滚动，但不让焦点进入
+                if (e.ChangedButton != System.Windows.Input.MouseButton.Middle)
+                {
+                    e.Handled = true;
+                }
+            };
         }
 
         #endregion
@@ -268,7 +287,12 @@ namespace 工业设备日志_AI_分析小工具
             try
             {
                 _parsedLogs = ParseLogLines(RawLogTextBox.Text);
-                ParseInfoTextBlock.Text = $"解析到 {_parsedLogs.Count} 条日志";
+                var maxLines = _settings.Prompting.MaxLogLinesForAnalysis > 0
+                    ? _settings.Prompting.MaxLogLinesForAnalysis
+                    : 200;
+                ParseInfoTextBlock.Text = _parsedLogs.Count > maxLines
+                    ? $"解析到 {_parsedLogs.Count} 条日志（取前 {maxLines} 条分析）"
+                    : $"解析到 {_parsedLogs.Count} 条日志";
 
                 var prompt = BuildPrompt(_parsedLogs);
                 var analysisContent = await AnalyzeWithApiAsync(runtimeProvider, apiKey, prompt);
@@ -287,7 +311,7 @@ namespace 工业设备日志_AI_分析小工具
             }
         }
 
-        private void ImportLogButton_Click(object sender, RoutedEventArgs e)
+        private async void ImportLogButton_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new OpenFileDialog
             {
@@ -299,10 +323,25 @@ namespace 工业设备日志_AI_分析小工具
                 return;
             }
 
-            RawLogTextBox.Text = File.ReadAllText(dialog.FileName, Encoding.UTF8);
-            _parsedLogs = ParseLogLines(RawLogTextBox.Text);
-            ParseInfoTextBlock.Text = $"已导入：{Path.GetFileName(dialog.FileName)}，解析 {_parsedLogs.Count} 条";
-            SetStatus("日志导入成功。", StatusLevel.Success);
+            SetBusy(true, "正在解析日志...");
+            try
+            {
+                var rawText = await Task.Run(() => File.ReadAllText(dialog.FileName, Encoding.UTF8));
+                RawLogTextBox.Text = rawText;
+                var parsed = await Task.Run(() => ParseLogLines(rawText));
+                _parsedLogs = parsed;
+                ParseInfoTextBlock.Text = $"已导入：{Path.GetFileName(dialog.FileName)}，解析 {_parsedLogs.Count} 条";
+                SetStatus("日志导入成功。", StatusLevel.Success);
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"日志导入失败：{ex.Message}", StatusLevel.Error);
+                ShowDialog("导入错误", $"无法读取日志文件：{ex.Message}", StatusLevel.Error);
+            }
+            finally
+            {
+                SetBusy(false, _parsedLogs.Count > 0 ? "就绪" : "就绪");
+            }
         }
 
         private void ExportReportButton_Click(object sender, RoutedEventArgs e)
@@ -371,7 +410,10 @@ namespace 工业设备日志_AI_分析小工具
 
         private string BuildPrompt(List<LogEntry> logs)
         {
-            var condensed = logs.Take(200).Select((x, i) =>
+            var maxLines = _settings.Prompting.MaxLogLinesForAnalysis > 0
+                ? _settings.Prompting.MaxLogLinesForAnalysis
+                : 200;
+            var condensed = logs.Take(maxLines).Select((x, i) =>
                 $"{i + 1}. [{x.Timestamp:yyyy-MM-dd HH:mm:ss}] [{x.Level}] {x.Message}");
 
             return $"""
@@ -712,39 +754,102 @@ namespace 工业设备日志_AI_分析小工具
 <head>
   <meta charset="utf-8" />
   <style>
+    * { box-sizing: border-box; }
     body {
       margin: 14px;
       font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
       font-size: 14px;
       color: #1f2937;
-      line-height: 1.6;
+      line-height: 1.7;
       background: transparent;
     }
-    h1, h2, h3 {
-      color: #0f2747;
-      margin-top: 1em;
-      margin-bottom: .5em;
+    h1 {
+      color: #0a1e3c;
+      font-size: 20px;
+      font-weight: 700;
+      margin-top: 0.2em;
+      margin-bottom: 0.6em;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #dce5f0;
     }
-    ul, ol { padding-left: 1.2em; }
+    h2 {
+      color: #0f2747;
+      font-size: 17px;
+      font-weight: 600;
+      margin-top: 1.2em;
+      margin-bottom: 0.5em;
+      padding-bottom: 5px;
+      border-bottom: 1px solid #e9eef4;
+    }
+    h3 {
+      color: #1a3a5c;
+      font-size: 15px;
+      font-weight: 600;
+      margin-top: 1em;
+      margin-bottom: 0.4em;
+    }
+    p { margin: 0.5em 0; }
+    ul, ol {
+      padding-left: 1.4em;
+      margin: 0.4em 0;
+    }
+    li { margin: 0.25em 0; }
+    strong { color: #0f2747; font-weight: 600; }
+    em { color: #374151; }
     code {
-      background: #f3f4f6;
-      padding: 2px 4px;
+      background: #edf2f7;
+      padding: 2px 6px;
       border-radius: 4px;
-      font-family: Consolas, monospace;
+      font-family: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+      font-size: 13px;
+      color: #1a3a5c;
     }
     pre {
-      background: #f8fafc;
-      border: 1px solid #e5e7eb;
+      background: #f3f7fc;
+      border: 1px solid #dce5f0;
       border-radius: 8px;
-      padding: 10px;
+      padding: 12px 14px;
       overflow-x: auto;
+      margin: 0.8em 0;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+      font-size: 13px;
+      color: #1f2937;
+      line-height: 1.5;
     }
     blockquote {
-      margin: .8em 0;
-      padding: .5em .8em;
-      border-left: 4px solid #93c5fd;
-      background: #f8fbff;
-      color: #334155;
+      margin: 0.8em 0;
+      padding: 0.6em 1em;
+      border-left: 4px solid #60a5fa;
+      background: #f0f7ff;
+      color: #1e3a5f;
+      border-radius: 0 6px 6px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.8em 0;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #dce5f0;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th {
+      background: #eef2f7;
+      color: #0f2747;
+      font-weight: 600;
+    }
+    tr:nth-child(even) { background: #f8fafc; }
+    tr:hover { background: #eff6ff; }
+    hr {
+      border: none;
+      border-top: 1px solid #dce5f0;
+      margin: 1.2em 0;
     }
   </style>
 </head>
@@ -942,6 +1047,9 @@ namespace 工业设备日志_AI_分析小工具
 
         [JsonPropertyName("诊断知识库文件")]
         public string KnowledgeBaseFile { get; set; } = "知识库/诊断知识库.md";
+
+        [JsonPropertyName("每次分析最大日志条数")]
+        public int MaxLogLinesForAnalysis { get; set; } = 200;
     }
 
     public sealed class ProviderConfig

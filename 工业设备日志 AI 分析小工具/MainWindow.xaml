@@ -54,14 +54,14 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="1" Margin="0,12,0,0" Padding="16" CornerRadius="10" Background="{DynamicResource MaterialDesignPaper}" Effect="{StaticResource CardShadow}">
+        <Border Grid.Row="1" Margin="0,0,0,0" Padding="16" CornerRadius="10" Background="{DynamicResource MaterialDesignPaper}" Effect="{StaticResource CardShadow}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0">
+                <Grid Grid.Row="0" Margin="0,-4,0,6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="140" />
                         <ColumnDefinition Width="10" />
@@ -84,7 +84,7 @@
                                TextTrimming="CharacterEllipsis" />
                 </Grid>
 
-                <Grid Grid.Row="1" Margin="0,14,0,0">
+                <Grid Grid.Row="1" Margin="0,20,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="16" />
@@ -165,12 +165,41 @@
                              FontSize="13"
                              IsReadOnly="True"
                              IsReadOnlyCaretVisible="False"
+                             Focusable="False"
+                             IsTabStop="False"
                              VerticalScrollBarVisibility="Auto"
                              AcceptsReturn="True"
                              Background="#F7FAFF"
                              BorderBrush="#D9E2EE"
                              BorderThickness="1"
-                             TextWrapping="NoWrap" />
+                             TextWrapping="NoWrap">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox" BasedOn="{x:Null}">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <Border Name="border"
+                                                    Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="4">
+                                                <ScrollViewer x:Name="PART_ContentHost"
+                                                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="BorderBrush" Value="#D9E2EE" />
+                                                </Trigger>
+                                                <Trigger Property="IsFocused" Value="True">
+                                                    <Setter TargetName="border" Property="BorderBrush" Value="#D9E2EE" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
                 </Grid>
             </Border>
 
