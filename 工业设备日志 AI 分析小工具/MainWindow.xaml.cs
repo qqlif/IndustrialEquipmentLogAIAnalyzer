@@ -16,10 +16,16 @@ using System.Windows.Media;
 
 namespace 工业设备日志_AI_分析小工具
 {
+    /// <summary>
+    /// 主窗口。提供工业设备日志导入、AI 分析、报告导出等一站式诊断功能。
+    /// </summary>
     public partial class MainWindow : Window
     {
         #region 状态与字段
 
+        /// <summary>
+        /// 底栏状态指示灯级别。
+        /// </summary>
         private enum StatusLevel
         {
             Info,
@@ -28,7 +34,9 @@ namespace 工业设备日志_AI_分析小工具
             Error
         }
 
+        /// <summary>全局共享 HttpClient，避免频繁创建连接池。</summary>
         private static readonly HttpClient HttpClient = new();
+        /// <summary>加密后文本的前缀标记，用于区分明文与密文。</summary>
         private const string EncryptedPrefix = "enc:";
         private readonly JsonSerializerOptions _jsonOptions = new()
         {
@@ -36,21 +44,34 @@ namespace 工业设备日志_AI_分析小工具
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
+        /// <summary>运行时配置对象，从 appsettings.json 反序列化。</summary>
         private AppSettings _settings = new();
+        /// <summary>已解析的日志条目列表。</summary>
         private List<LogEntry> _parsedLogs = new();
+        /// <summary>最近一次 AI 分析的结果报告。</summary>
         private AnalysisReport? _latestReport;
+        /// <summary>当前活跃的模型提供商名称。</summary>
         private string _activeProviderName = "当前模型";
+        /// <summary>当前活跃的模型提供商配置。</summary>
         private ProviderConfig _activeProvider = new();
+        /// <summary>配置文件所在目录（BaseDirectory + config）。</summary>
         private string _configDirectoryPath = string.Empty;
+        /// <summary>appsettings.json 完整路径。</summary>
         private string _settingsFilePath = string.Empty;
+        /// <summary>诊断提示词模板，从文本文件加载。</summary>
         private string _diagnosisPromptText = string.Empty;
+        /// <summary>知识库内容，从 Markdown 文件加载。</summary>
         private string _knowledgeBaseText = string.Empty;
+        /// <summary>对话框服务，用于显示提示/错误模态框。</summary>
         private readonly DialogService _dialogService;
 
         #endregion
 
         #region 初始化
 
+        /// <summary>
+        /// 初始化组件、对话框服务，然后依次加载配置、设置默认提供商、同步到 UI。
+        /// </summary>
         public MainWindow()
         {
             InitializeComponent();
@@ -65,13 +86,15 @@ namespace 工业设备日志_AI_分析小工具
 
         #region UI 初始化
 
+        /// <summary>
+        /// 使 RawLogTextBox 完全不可聚焦（键盘+鼠标），保留滚轮能力但禁止光标进入。
+        /// </summary>
         private void InitializeRawLogTextBox()
         {
-            // 彻底阻止 RawLogTextBox 获得焦点
             RawLogTextBox.PreviewGotKeyboardFocus += (_, e) => e.Handled = true;
             RawLogTextBox.PreviewMouseDown += (_, e) =>
             {
-                // 仍允许鼠标滚轮滚动，但不让焦点进入
+                // 鼠标中键滚轮仍可滚动，但不会获得焦点
                 if (e.ChangedButton != System.Windows.Input.MouseButton.Middle)
                 {
                     e.Handled = true;
@@ -83,6 +106,10 @@ namespace 工业设备日志_AI_分析小工具
 
         #region 配置加载与保存
 
+        /// <summary>
+        /// 从 config/appsettings.json 读取配置，自动迁移明文 API Key 为加密存储。
+        /// 若文件不存在，使用默认配置并以警告提示用户。
+        /// </summary>
         private void LoadSettings()
         {
             try
@@ -104,6 +131,7 @@ namespace 工业设备日志_AI_分析小工具
                     _settings = loaded;
                 }
 
+                // 检测并加密未保护的 API Key
                 EnsureApiKeysEncrypted();
                 LoadPromptAndKnowledgeFiles();
 
@@ -135,6 +163,9 @@ namespace 工业设备日志_AI_分析小工具
             }
         }
 
+        /// <summary>
+        /// 将运行时配置写入 appsettings.json（保留中文字符，带缩进）。
+        /// </summary>
         private void SaveSettings()
         {
             var json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions(_jsonOptions)
@@ -171,6 +202,10 @@ namespace 工业设备日志_AI_分析小工具
 
         #region UI 初始化与设置
 
+        /// <summary>
+        /// 从配置中选取第一个提供商作为当前活跃模型。
+        /// 若配置为空，写入一组默认值（DeepSeek 并保存）。
+        /// </summary>
         private void InitializeActiveProvider()
         {
             if (_settings.Providers.Count == 0)
@@ -229,6 +264,10 @@ namespace 工业设备日志_AI_分析小工具
 
         #region 事件处理
 
+        /// <summary>
+        /// 保存模型配置：先校验输入，然后更新活跃提供商并持久化到文件。
+        /// 若用户在密码框输入了新 API Key，则加密保存；留空则不修改。
+        /// </summary>
         private void SaveModelSettingsButton_Click(object sender, RoutedEventArgs e)
         {
             if (!ValidateModelInputs(showFeedback: true))
@@ -260,6 +299,10 @@ namespace 工业设备日志_AI_分析小工具
             SetStatus("大模型配置已保存。", StatusLevel.Success);
         }
 
+        /// <summary>
+        /// 主分析入口：校验配置 → 解析日志 → 构建提示词 → 调用 AI API → 渲染报告。
+        /// 异步执行，分析期间锁定 UI 控件防止重复操作。
+        /// </summary>
         private async void AnalyzeButton_Click(object sender, RoutedEventArgs e)
         {
             var runtimeProvider = BuildProviderFromUi(_activeProvider);
@@ -311,6 +354,9 @@ namespace 工业设备日志_AI_分析小工具
             }
         }
 
+        /// <summary>
+        /// 打开文件选择对话框，读取日志内容并在后台线程中解析。
+        /// </summary>
         private async void ImportLogButton_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new OpenFileDialog
@@ -326,6 +372,7 @@ namespace 工业设备日志_AI_分析小工具
             SetBusy(true, "正在解析日志...");
             try
             {
+                // 后台线程读取 + 解析，避免界面卡顿
                 var rawText = await Task.Run(() => File.ReadAllText(dialog.FileName, Encoding.UTF8));
                 RawLogTextBox.Text = rawText;
                 var parsed = await Task.Run(() => ParseLogLines(rawText));
@@ -344,6 +391,9 @@ namespace 工业设备日志_AI_分析小工具
             }
         }
 
+        /// <summary>
+        /// 将最近一次分析报告导出为 Markdown 文件，文件名含时间戳。
+        /// </summary>
         private void ExportReportButton_Click(object sender, RoutedEventArgs e)
         {
             if (_latestReport is null)
@@ -371,10 +421,15 @@ namespace 工业设备日志_AI_分析小工具
 
         #region 日志解析与提示词构建
 
+        /// <summary>
+        /// 将原始文本按行解析为 LogEntry 列表。支持标准时间戳 + 级别前缀的格式，
+        /// 无法匹配的行归为"未知"级别并保留原文。
+        /// </summary>
         private List<LogEntry> ParseLogLines(string rawText)
         {
             var lines = rawText.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
             var result = new List<LogEntry>(lines.Length);
+            // 匹配格式：[2025-06-12 10:30:00] [ERROR] 消息内容  或  2025-06-12T10:30:00 消息内容
             var regex = new Regex(@"^(?<time>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})(\s+\[(?<level>\w+)\])?\s*(?<msg>.*)$", RegexOptions.Compiled);
 
             foreach (var line in lines)
@@ -408,6 +463,10 @@ namespace 工业设备日志_AI_分析小工具
             return result;
         }
 
+        /// <summary>
+        /// 组装发送给 AI 的完整提示词：诊断模板 + 知识库 + 截断后的日志条目。\n
+        /// 日志条数受 MaxLogLinesForAnalysis 控制，超出则只取前 N 条。
+        /// </summary>
         private string BuildPrompt(List<LogEntry> logs)
         {
             var maxLines = _settings.Prompting.MaxLogLinesForAnalysis > 0
@@ -431,6 +490,9 @@ namespace 工业设备日志_AI_分析小工具
 
         #region API 调用与响应转换
 
+        /// <summary>
+        /// 获取有效的 API Key，优先级：环境变量 > 加密存储的 Key > 明文 Key。
+        /// </summary>
         private string GetProviderApiKey(ProviderConfig provider)
         {
             var envValue = Environment.GetEnvironmentVariable(provider.ApiKeyEnvVar ?? string.Empty);
@@ -452,6 +514,10 @@ namespace 工业设备日志_AI_分析小工具
         private static bool IsEncrypted(string value)
             => value.StartsWith(EncryptedPrefix, StringComparison.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// 使用 DPAPI 加密明文密钥，结果以 enc: 前缀标识。
+        /// 加密基于当前 Windows 用户，仅同一用户可解密。
+        /// </summary>
         private static string EncryptSecret(string plainText)
         {
             var input = Encoding.UTF8.GetBytes(plainText);
@@ -459,6 +525,9 @@ namespace 工业设备日志_AI_分析小工具
             return EncryptedPrefix + Convert.ToBase64String(encrypted);
         }
 
+        /// <summary>
+        /// 解密 enc: 前缀的密钥，使用 DPAPI（当前用户范围）。
+        /// </summary>
         private static string DecryptSecret(string encryptedValue)
         {
             var base64 = encryptedValue[EncryptedPrefix.Length..];
@@ -487,6 +556,10 @@ namespace 工业设备日志_AI_分析小工具
 """;
         }
 
+        /// <summary>
+        /// 向 OpenAI 兼容接口发送 Chat Completion 请求，提取返回的文本内容。
+        /// 请求地址由 BaseUrl 自动拼接（可接受完整地址或前缀）。
+        /// </summary>
         private async Task<string> AnalyzeWithApiAsync(ProviderConfig provider, string apiKey, string prompt)
         {
             var requestUrl = ResolveAnalyzeApiUrl(provider.BaseUrl);
@@ -523,6 +596,10 @@ namespace 工业设备日志_AI_分析小工具
                 : content;
         }
 
+        /// <summary>
+        /// 将用户输入的 API 地址规范化为可请求的 URL。
+        /// 支持完整地址（含 /chat/completions）或简写前缀（自动补全 /v1/chat/completions）。
+        /// </summary>
         private static string ResolveAnalyzeApiUrl(string baseUrl)
         {
             var value = (baseUrl ?? string.Empty).Trim();
@@ -550,6 +627,11 @@ namespace 工业设备日志_AI_分析小工具
             return $"{trimmed}/v1/chat/completions";
         }
 
+        /// <summary>
+        /// 将 API 原始响应转换为 AnalysisReport 对象。
+        /// 优先精确反序列化，失败则逐字段容错提取；
+        /// 若两者都失败，将原始文本放入 Summary 作为回退。
+        /// </summary>
         private AnalysisReport ConvertToReport(string analysisContent, string providerName)
         {
             if (TryParseAnalysisReport(analysisContent, out var report))
@@ -572,6 +654,9 @@ namespace 工业设备日志_AI_分析小工具
             };
         }
 
+        /// <summary>
+        /// 将英文风险等级标准化为中文：low→低, medium→中, high→高, critical→严重。
+        /// </summary>
         private static string NormalizeRiskLevel(string? riskLevel)
         {
             if (string.IsNullOrWhiteSpace(riskLevel))
@@ -716,6 +801,9 @@ namespace 工业设备日志_AI_分析小工具
 
         #region 报告渲染与界面状态
 
+        /// <summary>
+        /// 将 AnalysisReport 对象渲染为 Markdown 字符串，供 WebBrowser 展示。
+        /// </summary>
         private static string RenderReport(AnalysisReport report)
         {
             var builder = new StringBuilder();
@@ -745,6 +833,10 @@ namespace 工业设备日志_AI_分析小工具
             return builder.ToString();
         }
 
+        /// <summary>
+        /// 将 Markdown 字符串通过 Markdig 转为 HTML 后注入 WebBrowser 显示。
+        /// 内置预定义的 CSS 样式（工业蓝主题）。
+        /// </summary>
         private void RenderMarkdownToBrowser(string markdown)
         {
             var htmlBody = Markdown.ToHtml(markdown ?? string.Empty);
@@ -862,6 +954,9 @@ namespace 工业设备日志_AI_分析小工具
             AnalysisMarkdownBrowser.NavigateToString(html);
         }
 
+        /// <summary>
+        /// 锁定/解锁 UI 控件，防止分析或导入期间的重复操作，同时更新状态文本。
+        /// </summary>
         private void SetBusy(bool busy, string status)
         {
             ImportLogButton.IsEnabled = !busy;
@@ -874,6 +969,9 @@ namespace 工业设备日志_AI_分析小工具
             SetStatus(status, StatusLevel.Info);
         }
 
+        /// <summary>
+        /// 校验 API 地址与模型名输入框的内容，并用边框颜色反馈有效性。
+        /// </summary>
         private bool ValidateModelInputs(bool showFeedback)
         {
             var messages = new List<string>();
@@ -914,6 +1012,9 @@ namespace 工业设备日志_AI_分析小工具
                 : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D32F2F"));
         }
 
+        /// <summary>
+        /// 更新底栏状态文本，并切换右侧指示灯颜色（蓝/绿/橙/红）。
+        /// </summary>
         private void SetStatus(string message, StatusLevel level)
         {
             StatusTextBlock.Text = message;
@@ -962,25 +1063,9 @@ namespace 工业设备日志_AI_分析小工具
 
         #endregion
 
-        //private void ApiBaseUrlTextBox_TextChanged(object sender, TextChangedEventArgs e)
-        //{
-        //    //< TextBox x: Name = "ApiBaseUrlTextBox"
-        //    //Grid.Column = "0"
-        //    //Grid.Row = "0"
-        //    //ToolTip = "示例：https://api.deepseek.com（推荐）；按输入原样保存，内部调用会自动拼接 chat/completions"
-        //    //materialDesign: HintAssist.HelperText = "请输入有效的 http/https 地址"
-        //    //materialDesign: HintAssist.Hint = "API地址（默认：https://api.deepseek.com）" TextChanged = "ApiBaseUrlTextBox_TextChanged" />
-        //}
-
-        //private void ModelNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
-        //{
-        //    //< TextBox x: Name = "ModelNameTextBox"
-        //    //Grid.Column = "2"
-        //    //Grid.Row = "0"
-        //    //ToolTip = "示例：deepseek-v4-flash"
-        //    //materialDesign: HintAssist.HelperText = "模型名不能为空"
-        //}
-
+        /// <summary>
+        /// 实时校验 API 地址格式，更新 HelperText 提示。
+        /// </summary>
         private void ApiBaseUrlTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             var textBox = sender as TextBox;
@@ -1007,6 +1092,9 @@ namespace 工业设备日志_AI_分析小工具
             }
         }
 
+        /// <summary>
+        /// 实时校验模型名是否为空，更新 HelperText 提示。
+        /// </summary>
         private void ModelNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             var textBox = sender as TextBox;
@@ -1031,42 +1119,63 @@ namespace 工业设备日志_AI_分析小工具
         }
     }
 
+    /// <summary>
+    /// 应用配置根对象，对应 appsettings.json 顶层结构。
+    /// </summary>
     public sealed class AppSettings
     {
+        /// <summary>模型提供商字典，键为自定义名称，值为连接参数。</summary>
         [JsonPropertyName("模型提供商")]
         public Dictionary<string, ProviderConfig> Providers { get; set; } = new();
 
+        /// <summary>提示词与知识库相关配置。</summary>
         [JsonPropertyName("提示配置")]
         public PromptingConfig Prompting { get; set; } = new();
     }
 
+    /// <summary>
+    /// 提示词与知识库文件路径配置，以及分析参数。
+    /// </summary>
     public sealed class PromptingConfig
     {
+        /// <summary>诊断提示词模板文件路径（相对或绝对）。</summary>
         [JsonPropertyName("诊断提示词文件")]
         public string DiagnosisPromptFile { get; set; } = "提示词/诊断提示词.txt";
 
+        /// <summary>诊断知识库 Markdown 文件路径。</summary>
         [JsonPropertyName("诊断知识库文件")]
         public string KnowledgeBaseFile { get; set; } = "知识库/诊断知识库.md";
 
+        /// <summary>单次分析提交给 AI 的最大日志条数，超出部分截断。</summary>
         [JsonPropertyName("每次分析最大日志条数")]
         public int MaxLogLinesForAnalysis { get; set; } = 200;
     }
 
+    /// <summary>
+    /// 单个模型提供商的连接参数（地址、模型名、环境变量、密钥）。
+    /// </summary>
     public sealed class ProviderConfig
     {
+        /// <summary>API 接口地址，如 https://api.deepseek.com</summary>
         [JsonPropertyName("接口地址")]
         public string BaseUrl { get; set; } = string.Empty;
 
+        /// <summary>模型名称，如 deepseek-v4-flash</summary>
         [JsonPropertyName("模型名称")]
         public string Model { get; set; } = string.Empty;
 
+        /// <summary>优先使用的环境变量键名，如 DEEPSEEK_API_KEY</summary>
         [JsonPropertyName("环境变量键名")]
         public string ApiKeyEnvVar { get; set; } = string.Empty;
 
+        /// <summary>加密存储的接口密钥（以 enc: 前缀标识）。</summary>
         [JsonPropertyName("接口密钥")]
         public string ApiKey { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// 单条日志条目，解析后的结构化表示。
+    /// </summary>
     public sealed class LogEntry
     {
         public DateTime? Timestamp { get; set; }
@@ -1074,6 +1183,10 @@ namespace 工业设备日志_AI_分析小工具
         public string Message { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// AI 分析结果的结构化报告，包含摘要、风险等级、原因、建议。
+    /// JSON 字段使用中文，与 AI 输出格式对齐。
+    /// </summary>
     public sealed class AnalysisReport
     {
         [JsonPropertyName("摘要")]
@@ -1091,10 +1204,15 @@ namespace 工业设备日志_AI_分析小工具
         [JsonPropertyName("置信度")]
         public double Confidence { get; set; }
 
+        /// <summary>模型提供商名称（运行时填充）。</summary>
         public string Provider { get; set; } = string.Empty;
+        /// <summary>报告生成时间（运行时填充）。</summary>
         public DateTime GeneratedAt { get; set; }
     }
 
+    /// <summary>
+    /// OpenAI 兼容的 Chat Completions 请求体。
+    /// </summary>
     public sealed class ChatCompletionsRequest
     {
         [JsonPropertyName("model")]
@@ -1107,6 +1225,9 @@ namespace 工业设备日志_AI_分析小工具
         public double Temperature { get; set; } = 0.2;
     }
 
+    /// <summary>
+    /// Chat 消息，包含角色（system/user/assistant）和内容。
+    /// </summary>
     public sealed class ChatMessage
     {
         [JsonPropertyName("role")]
@@ -1116,12 +1237,18 @@ namespace 工业设备日志_AI_分析小工具
         public string Content { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// OpenAI 兼容的 Chat Completions 响应体。
+    /// </summary>
     public sealed class ChatCompletionsResponse
     {
         [JsonPropertyName("choices")]
         public List<Choice>? Choices { get; set; }
     }
 
+    /// <summary>
+    /// 响应中的单个选择，包含模型返回的 message。
+    /// </summary>
     public sealed class Choice
     {
         [JsonPropertyName("message")]

@@ -4,6 +4,9 @@ using System.Windows.Media;
 
 namespace 工业设备日志_AI_分析小工具;
 
+/// <summary>
+/// 对话框严重级别，用于控制标题颜色与视觉风格。
+/// </summary>
 public enum DialogLevel
 {
     Info,
@@ -12,12 +15,24 @@ public enum DialogLevel
     Error
 }
 
+/// <summary>
+/// 封装通用模态对话框。通过代码（非 XAML）构建窗口，避免引入额外视图依赖。
+/// 主构造函数注入所属窗口，确保对话框居中于父窗口。
+/// </summary>
+/// <param name="owner">父窗口实例，用于设置 Owner 关系</param>
 public sealed class DialogService(Window owner)
 {
     private readonly Window _owner = owner;
 
+    /// <summary>
+    /// 弹出模态对话框，根据级别设置不同颜色的标题。
+    /// </summary>
+    /// <param name="title">对话框标题</param>
+    /// <param name="message">正文内容</param>
+    /// <param name="level">严重级别，控制标题颜色</param>
     public void Show(string title, string message, DialogLevel level)
     {
+        // 根据级别确定标题颜色（深绿/橙/红/蓝）
         var levelColor = level switch
         {
             DialogLevel.Success => "#1B5E20",

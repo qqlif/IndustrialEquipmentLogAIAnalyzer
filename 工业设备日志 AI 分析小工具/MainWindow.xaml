@@ -16,6 +16,7 @@
         TextElement.FontSize="14"
         TextElement.FontWeight="Regular"
         TextElement.Foreground="{DynamicResource MaterialDesignBody}">
+    <!-- 全局资源：按钮样式与卡片阴影效果 -->
     <Window.Resources>
         <Style x:Key="BrandButtonStyle" TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
             <Setter Property="Background" Value="#0052CC" />
@@ -35,6 +36,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- 标题栏：应用 Logo + 标题/副标题 -->
         <Border Padding="18" CornerRadius="10" Background="{DynamicResource MaterialDesignPaper}" Effect="{StaticResource CardShadow}">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -54,6 +56,7 @@
             </Grid>
         </Border>
 
+        <!-- 工具栏：导入日志 / AI 分析 / 导出报告 + 配置区域 -->
         <Border Grid.Row="1" Margin="0,0,0,0" Padding="16" CornerRadius="10" Background="{DynamicResource MaterialDesignPaper}" Effect="{StaticResource CardShadow}">
             <Grid>
                 <Grid.RowDefinitions>
@@ -143,6 +146,7 @@
             </Grid>
         </Border>
 
+        <!-- 主工作区：原始日志（左） + AI 分析报告（右） -->
         <Grid Grid.Row="2" Margin="0,12,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -217,6 +221,7 @@
             </Border>
         </Grid>
 
+        <!-- 状态栏：运行/完成/告警/故障指示灯 + 状态文本 -->
         <Border x:Name="StatusBorder" Grid.Row="3" Padding="12" CornerRadius="10" Background="#E8F1FF" Effect="{StaticResource CardShadow}">
             <Grid>
                 <Grid.ColumnDefinitions>
